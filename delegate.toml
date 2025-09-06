@@ -1,0 +1,6 @@
+[job-manager]
+plugins = [
+  { load = "/usr/lib/flux-delegate-plugin/delegate_c_bridge.so"},
+]
+
+
