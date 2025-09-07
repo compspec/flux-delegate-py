@@ -1,18 +1,16 @@
+# File: Makefile.am (FINAL CORRECTED VERSION with -pthread in LDFLAGS)
+
 ACLOCAL_AMFLAGS = -I m4
 
 pkglib_LTLIBRARIES = delegate_c_bridge.la
 
 delegate_c_bridge_la_SOURCES = delegate_c_bridge.c
 
-delegate_c_bridge_la_CFLAGS = \
-    $(FLUX_CORE_CFLAGS) \
-    @PYTHON_CFLAGS@
+delegate_c_bridge_la_CFLAGS = @FLUX_CORE_CFLAGS@ @PYTHON_CFLAGS@
 
-delegate_c_bridge_la_LDFLAGS = -module -avoid-version -shared
+delegate_c_bridge_la_LDFLAGS = -module -avoid-version -shared -pthread
 
-delegate_c_bridge_la_LIBADD = \
-    $(FLUX_CORE_LIBS) \
-    @PYTHON_LIBS@
+delegate_c_bridge_la_LIBADD = @FLUX_CORE_LIBS@ @PYTHON_LIBS@ -ldl
 
 clean-local:
 	@echo "--- Running cleanup ---"

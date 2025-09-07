@@ -1,123 +1,103 @@
-/****************************************************************************
- * delegate_c_bridge.c
- *
- * A Flux jobtap plugin written in C that acts as a bridge to a Python script.
- * This plugin handles the 'job.dependency.delegate' topic by calling a
- * Python function to perform the actual delegation logic.
- ****************************************************************************/
+#include <Python.h>
+#include <flux/jobtap.h>
+#include <jansson.h>
+#include <dlfcn.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
 
-#include <Python.h>       // Python C-API
-#include <flux/jobtap.h>  // Flux jobtap plugin functions
-#include <jansson.h>      // JSON handling from Flux
+typedef struct {
+    long long jobid;
+    char *remote_uri;
+    char *jobspec_str;
+    char *local_uri;
+} thread_args_t;
 
-/*
- * Callback function that handles 'job.dependency.delegate' requests.
- * This is the main entry point from the Flux job manager.
- */
-static int depend_cb(flux_plugin_t *p,
-                     const char *topic,
-                     flux_plugin_arg_t *args,
-                     void *arg)
-{
-    // Variables to hold unpacked job data
-    json_int_t id;
-    const char *uri;
-    json_t *jobspec;
+// worker_thread handles the loading of Python, submit, etc.
+void *worker_thread(void *arg) {
+    thread_args_t *args = (thread_args_t *)arg;
+    void *libpython_handle = NULL;
+    PyObject *pName = NULL, *pModule = NULL, *pFunc = NULL, *pArgs = NULL, *pValue = NULL;
 
-    // Variables for the Python C-API
-    PyObject *pName, *pModule, *pFunc;
-    PyObject *pArgs, *pValue;
-    long result;
-
-    // Step 1: Unpack arguments from the Flux job manager.
-    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-                               "{s:I s:{s:s} s:o}",
-                               "id", &id,
-                               "dependency", "value", &uri,
-                               "jobspec", &jobspec) < 0) {
-        return flux_jobtap_reject_job(p, args, "arg_unpack failed");
-    }
-
-    // Step 2: Initialize the Python interpreter.
+    libpython_handle = dlopen("libpython3.10.so", RTLD_LAZY | RTLD_GLOBAL);
+    if (!libpython_handle) { goto cleanup; }
     Py_Initialize();
-
-    // Add the current directory "." to Python's sys.path.
-    // This allows the interpreter to find the 'delegate_handler.py' script.
-    // We can harden this, security wise, by choosing a system owned python file
     PyRun_SimpleString("import sys; sys.path.append('.')");
 
-    // Step 3: Load the Python module (our .py file).
-    // This could theoretically come from another source too.
-    pName = PyUnicode_DecodeFSDefault("delegate_handler"); // The filename without .py
-    pModule = PyImport_Import(pName);
-    Py_DECREF(pName);
+    pName = PyUnicode_DecodeFSDefault("delegate_handler");
+    pModule = PyImport_Import(pName); Py_XDECREF(pName);
+    if (!pModule) { PyErr_Print(); goto cleanup; }
 
-    if (pModule == NULL) {
-        PyErr_Print(); // Print the Python import error to stderr
-        fprintf(stderr, "Fatal: Failed to load 'delegate_handler.py'\n");
-        Py_Finalize();
-        return flux_jobtap_reject_job(p, args, "Python module not found");
-    }
-
-    // Step 4: Get a reference to the function we want to call.
     pFunc = PyObject_GetAttrString(pModule, "handle_delegation");
-    if (!pFunc || !PyCallable_Check(pFunc)) {
-        if (PyErr_Occurred()) PyErr_Print();
-        fprintf(stderr, "Fatal: Cannot find function 'handle_delegation' in Python script\n");
-        Py_DECREF(pModule);
-        Py_Finalize();
-        return flux_jobtap_reject_job(p, args, "Python function not found");
-    }
+    if (!pFunc || !PyCallable_Check(pFunc)) { PyErr_Print(); goto cleanup; }
 
-    // Step 5: Build the arguments to pass to the Python function.
-    pArgs = PyTuple_New(2); // We are passing 2 arguments.
+    pArgs = PyTuple_New(4);
+    PyTuple_SetItem(pArgs, 0, PyLong_FromLongLong(args->jobid));
+    PyTuple_SetItem(pArgs, 1, PyUnicode_FromString(args->remote_uri));
+    PyTuple_SetItem(pArgs, 2, PyUnicode_FromString(args->jobspec_str));
+    PyTuple_SetItem(pArgs, 3, PyUnicode_FromString(args->local_uri));
 
-    // Argument 1: The job ID
-    pValue = PyLong_FromLongLong(id);
-    PyTuple_SetItem(pArgs, 0, pValue); // pArgs takes ownership of pValue
-
-    // Argument 2: The delegation URI
-    pValue = PyUnicode_FromString(uri);
-    PyTuple_SetItem(pArgs, 1, pValue); // pArgs takes ownership of pValue
-
-    // Step 6: Call the Python function.
     pValue = PyObject_CallObject(pFunc, pArgs);
-    Py_DECREF(pArgs);
+    Py_XDECREF(pArgs);
 
-    // Step 7: Check the return value from the Python function.
-    if (pValue != NULL) {
-        result = PyLong_AsLong(pValue); // Convert Python int to C long
-        Py_DECREF(pValue);
-    } else {
-        PyErr_Print(); // An exception occurred in the Python code
-        result = -1; // Indicate failure
+    if (pValue == NULL) { PyErr_Print(); }
+    Py_XDECREF(pValue);
+
+cleanup:
+    Py_XDECREF(pFunc);
+    Py_XDECREF(pModule);
+    if (libpython_handle) {
+        Py_Finalize();
+        dlclose(libpython_handle);
     }
-
-    // Step 8: Clean up the Python interpreter.
-    Py_DECREF(pFunc);
-    Py_DECREF(pModule);
-    Py_Finalize();
-
-    // Step 9: Return the final status to the Flux job manager.
-    if (result == 0) {
-        // The Python handler succeeded.
-        // Signal to job manager that the dependency was handled successfully. 
-        // The job will proceed based on this success.
-        return 0;
-    }
-
-    // The Python handler returned a non-zero (failure) code.
-    return flux_jobtap_reject_job(p, args, "Python handler failed");
+    free(args->remote_uri);
+    free(args->jobspec_str);
+    free(args->local_uri);
+    free(args);
+    return NULL;
 }
 
-// The handler table maps topics to callback functions.
-static const struct flux_plugin_handler tab[] = {
-    {"job.dependency.delegate", depend_cb, NULL},
-    {0}, // Sentinel to mark the end of the table
-};
+// depend_cb is expected for JobTap plugin
+static int depend_cb(flux_plugin_t *p, const char *topic, flux_plugin_arg_t *args, void *arg) {
+    thread_args_t *t_args = NULL;
+    pthread_t thread_id;
+    json_int_t id;
+    const char *remote_uri_const, *local_uri_const;
+    json_t *jobspec;
 
-// The main entry point called by Flux when the plugin is loaded.
+    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN, "{s:I s:{s:s} s:o}",
+                               "id", &id, "dependency", "value", &remote_uri_const,
+                               "jobspec", &jobspec) < 0) { return -1; }
+    if (json_unpack(jobspec, "{s:{s:{s:{s:s}}}}", "attributes", "system", "delegate", "local_uri",
+                    &local_uri_const) < 0) {
+        return flux_jobtap_reject_job(p, args, "Missing attribute 'system.delegate.local_uri'");
+    }
+    if (flux_jobtap_dependency_add(p, id, "delegated") < 0) { return -1; }
+
+    t_args = malloc(sizeof(thread_args_t));
+    if (!t_args) { return -1; }
+    t_args->jobid = id;
+    t_args->remote_uri = strdup(remote_uri_const);
+    t_args->local_uri = strdup(local_uri_const);
+    t_args->jobspec_str = json_dumps(jobspec, 0);
+
+    if (!t_args->remote_uri || !t_args->local_uri || !t_args->jobspec_str) {
+        free(t_args->remote_uri); free(t_args->local_uri);
+        free(t_args->jobspec_str); free(t_args);
+        return -1;
+    }
+    if (pthread_create(&thread_id, NULL, worker_thread, t_args)) {
+        free(t_args->remote_uri); free(t_args->local_uri);
+        free(t_args->jobspec_str); free(t_args);
+        return -1;
+    }
+    pthread_detach(thread_id);
+    return 0;
+}
+
+static const struct flux_plugin_handler tab[] = {
+    {"job.dependency.delegate", depend_cb, NULL}, {0},
+};
 int flux_plugin_init(flux_plugin_t *p) {
-    // Register our plugin name and handler table.
     return flux_plugin_register(p, "delegate-c-bridge", tab);
 }
