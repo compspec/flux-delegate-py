@@ -1,4 +1,6 @@
-# File: Makefile.am (FINAL CORRECTED VERSION with -pthread in LDFLAGS)
+###########################################################################
+# Build C Stuff Rules
+###########################################################################
 
 ACLOCAL_AMFLAGS = -I m4
 
@@ -11,6 +13,16 @@ delegate_c_bridge_la_CFLAGS = @FLUX_CORE_CFLAGS@ @PYTHON_CFLAGS@
 delegate_c_bridge_la_LDFLAGS = -module -avoid-version -shared -pthread
 
 delegate_c_bridge_la_LIBADD = @FLUX_CORE_LIBS@ @PYTHON_LIBS@ -ldl
+
+###########################################################################
+# Install Script Rules
+###########################################################################
+
+# $(libexecdir) is a standard autotools thing (e.g., /usr/libexec).
+fluxcmddir = $(libexecdir)/flux/cmd
+
+# Using _SCRIPTS ensures the file is installed with execute permissions.
+fluxcmd_SCRIPTS = cmd/flux-remote.py
 
 clean-local:
 	@echo "--- Running cleanup ---"

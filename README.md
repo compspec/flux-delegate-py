@@ -9,13 +9,10 @@ We need to add a feasibility check, e.g., "Given these requests for software or 
 On the other hand, we don't want to add stress to flux-core to do these expensive checks for every job submit. So maybe what needs to happen is our library performs a local feasibility check, and _then_ formulates the submit request to the local Flux instance, and then the JobTap submits it. To the user, it is one command. And actually for our tool (fractale) we can wrap it in a flux command so it looks like a single flux command. Something like:
 
 ```bash
-flux remote-submit ...
-flux delegate ...
-flux remove <subcommand>
-flux remote submit
+flux remote submit <same as flux submit>
 ```
 
-I like the last one the best - we would have a suite of commands for multi-cluster. I will work on that.
+The above is implemented to wrap around submit, and that is the extra command in [cmd](cmd) that can be installed to a Flux root (or just run as a one-off script). We just need to add the fractale stuff there. Will work on this week.
 
 ## Development
 
