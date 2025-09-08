@@ -10,14 +10,21 @@ ENV USERNAME=${USERNAME}
 ENV USER_UID=${USER_UID}
 ENV USER_GID=${USER_GID}
 USER root
-      
+
 # extra interactive utilities
 RUN apt-get update \
  && apt-get -qq install -y --no-install-recommends \
     fd-find \
     less \
     bats \
-    ripgrep
+    ripgrep \
+    lsb-release \
+    gnupg2
+
+# Python depedencies
+RUN python3 -m pip install fractale && \
+    wget https://downloads.skewed.de/skewed-keyring/skewed-keyring_1.3_all_$(lsb_release -s -c).deb && \
+    dpkg -i skewed-keyring_1.3_all_$(lsb_release -s -c).deb
 
 # Add the group and user that match our ids
 RUN groupadd -g ${USER_GID} ${USERNAME} && \

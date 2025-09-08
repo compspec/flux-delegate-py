@@ -1,11 +1,14 @@
 # File: delegate_handler.py (FINAL CORRECTED VERSION - Submit only)
 
 import sys
-sys.modules['yaml.cyaml'] = None
+
+sys.modules["yaml.cyaml"] = None
+
+import json
 
 import flux
 import flux.job
-import json
+
 
 def handle_delegation(jobid, remote_uri, jobspec_str, local_uri):
     """
@@ -18,12 +21,16 @@ def handle_delegation(jobid, remote_uri, jobspec_str, local_uri):
     print(f"Delegate: Starting remote submission for job {jobid} to {remote_uri}")
 
     jobspec = json.loads(jobspec_str)
-    if ("attributes" in jobspec and "system" in jobspec["attributes"] and "dependencies" in jobspec["attributes"]["system"]):
+    if (
+        "attributes" in jobspec
+        and "system" in jobspec["attributes"]
+        and "dependencies" in jobspec["attributes"]["system"]
+    ):
         del jobspec["attributes"]["system"]["dependencies"]
 
     # This would do it infinitely...
-    if 'delegate' in jobspec['attributes']['system']:
-        del jobspec['attributes']['system']['delegate']
+    if "delegate" in jobspec["attributes"]["system"]:
+        del jobspec["attributes"]["system"]["delegate"]
     encoded_jobspec = json.dumps(jobspec)
 
     # Use the one helper function that has been proven to work reliably.

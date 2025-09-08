@@ -40,3 +40,15 @@ At this point you have your development environment, You can tweak the Python sc
 flux submit --verbose --setattr=delegate.local_uri=$FLUX_URI --dependency=delegate:$FLUX_URI hostname
 ```
 I added the local uri as an attribute because it would mean we can direct the interaction, saying exactly FROM where and TO where. I'm next wanting to think about how this fits into Fractale. We should have a lookup of clusters we know in the user's home, and then the URIs can come from there after a match is done. I also want to account for something with node features using NFD.
+
+## Fractale
+
+For integration with Fractale (and flux) we won't require the user to ask for delegation directly. We will provide a command for a remote submit:
+
+```bash
+flux remote submit --dry-run --setattr=requires.software=spack:curl curl
+```
+
+In the above, the user is asking for a remote submit. This means we are going to receive the request in Flux, compare to local subsystems and clusters defined by the user in their home, and then make a selection of a cluster. The selected cluster will go straight to the JobTap plugin from the `flux remote submit` command without the user needing any subsequent interaction.
+What I want to work on / harden is the organization, structure, and query of the cluster and subsystem metadata. I've been forcing use of a graph but I am not convinced that is the best way.
+See [examples/fractale](examples/fractale) for the full example, and the [cmd](cmd) that is added to Flux as a WIP to orchestrate this.
