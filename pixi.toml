@@ -16,3 +16,6 @@ ply = ">=3.11,<4"
 
 [pypi-dependencies]
 fractale = ">=0.0.13, <0.0.14"
+
+[activation]
+scripts = ["set_vars.sh"]

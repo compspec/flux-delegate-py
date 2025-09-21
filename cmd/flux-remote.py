@@ -33,7 +33,7 @@ def open_logfile(fd):
 
 
 class SubmitCmd(base.SubmitCmd):
-    def main(self, args, remote_args):
+    def main(self, args, remote_args, dry_run=False):
         """
         Add a step before main to run feasibility check.
 
@@ -41,6 +41,8 @@ class SubmitCmd(base.SubmitCmd):
         """
         # Feasibility check handles args from flux remote
         with_delegation = self.feasibility_check(args, remote_args)
+        if dry_run:
+            sys.exit(0)
 
         # Submit the jobspec args, which may now have delegation
         self.submit_async_with_cc(with_delegation)
@@ -57,13 +59,9 @@ class SubmitCmd(base.SubmitCmd):
         if not os.path.exists(store.root):
             store.detect()
 
-        # This is inefficient, but right now we write the jobspec to file
-        # TODO: expose a means to pass in JobSpec from string or dict (not file)
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=".yaml", prefix="jobspec-"
-        ) as temp_file:
-            temp_file_path = temp_file.name
-        utils.write_yaml(jobspec.jobspec, temp_file_path)
+        # If we detect and none still found, there are none.
+        if not os.path.exists(store.root):
+            sys.exit("No subsystems found.")
 
         # TODO Vanessa - this is parsing the wrong format. I need to update it.
         # I want to make a hardened organization for this. Operations across clusters can be in in parallel
@@ -77,15 +75,9 @@ class SubmitCmd(base.SubmitCmd):
         #    - For Flux we finalize, add the delegation plugin URI, and we are done.
         #    - For Kubernetes, it's easier (an API call) and this should also be done by delegation
         # 5. Fall through case (no remote matches) we submit as usual to local cluster instance
-        print("FIX THE FORMAT VANESSA YOU GOBLIN")
-        import IPython
-
-        IPython.embed()
         solver = get_subsystem_solver(store.clusters_root, remote_args.solver)
-        is_satisfied = solver.satisfied(temp_file_path)
+        is_satisfied = solver.satisfied(jobspec.jobspec)
 
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
         # If we are satisifed, we can get the result, and then add it to the JobSpec as a delegate dependency. We will
         # That would look like this:
         # args.setattr = [f'delegate.local_uri=${uri}']
@@ -124,6 +116,8 @@ class RemoteSubmitCmd(base.SubmitCmd):
             dest="config_dir",
             help="Fractale configuration directory to store subsystems. Defaults to ~/.fractale",
         )
+        # IMPORTANT: if you add more args here, submit will stop working, and you need
+        # to account for parsing them out.
         parser.add_argument("command", help="Subcommand to run (e.g., 'submit')")
 
         # This just processes our added command (expecting other subcommands eventually)
@@ -131,13 +125,13 @@ class RemoteSubmitCmd(base.SubmitCmd):
 
         # Now, we dispatch to the correct handler based on the command.
         if args.command == "submit":
-            self.handle_submit(remaining_argv, args)
+            self.handle_submit(remaining_argv, args, dry_run="--dry-run" in sys.argv)
         else:
             print(
                 f"{args.command} is not a recognized Flux command. Try `flux remote submit`"
             )
 
-    def handle_submit(self, argv, remote_args):
+    def handle_submit(self, argv, remote_args, dry_run=False):
         """
         Handle the submit subcommand.
 
@@ -155,7 +149,7 @@ class RemoteSubmitCmd(base.SubmitCmd):
         # Repopulate the initial submit args
         sys.argv = argv
         args = submit_parser.parse_args()
-        args.func(args, remote_args)
+        args.func(args, remote_args, dry_run)
 
 
 @flux.util.CLIMain(LOGGER)

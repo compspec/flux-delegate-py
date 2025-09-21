@@ -28,7 +28,12 @@ COPY pixi.toml pixi.lock /opt/pixi/
 WORKDIR /opt/pixi
 RUN /bin/bash -c "curl -fsSL https://pixi.sh/install.sh | bash"  && pixi install
 
-ENV PYTHONPATH=/usr/lib/python3.10/site-packages
+# Need to "install" fluxion
+RUN git clone --depth 1 https://github.com/flux-framework/flux-sched /tmp/flux-sched
+ENV PYTHONPATH=/usr/lib/python3.10/site-packages:/tmp/flux-sched/src/python
+
+# This should be set in the pixi environment
+ENV NO_AT_BRIDGE=1
 
 # Add the group and user that match our ids
 RUN groupadd -g ${USER_GID} ${USERNAME} && \
