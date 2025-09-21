@@ -22,9 +22,13 @@ RUN apt-get update \
     gnupg2
 
 # Python depedencies
-RUN python3 -m pip install fractale && \
-    wget https://downloads.skewed.de/skewed-keyring/skewed-keyring_1.3_all_$(lsb_release -s -c).deb && \
-    dpkg -i skewed-keyring_1.3_all_$(lsb_release -s -c).deb
+ENV PIXI_HOME=/opt/pixi
+ENV PATH=/opt/pixi/bin:$PATH
+COPY pixi.toml pixi.lock /opt/pixi/
+WORKDIR /opt/pixi
+RUN /bin/bash -c "curl -fsSL https://pixi.sh/install.sh | bash"  && pixi install
+
+ENV PYTHONPATH=/usr/lib/python3.10/site-packages
 
 # Add the group and user that match our ids
 RUN groupadd -g ${USER_GID} ${USERNAME} && \

@@ -1,1 +1,23 @@
 .deps
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+Makefile
+Makefile.in
+aclocal.m4
+ar-lib
+autom4te.cache
+compile
+config.*
+configure
+.libs
+install-sh
+libtool
+m4
+missing
+stamp-h1
+depcomp
+ltmain.sh
+*.la
+*.lo
+*.o

@@ -10,11 +10,14 @@
 
 import argparse
 import logging
+import os
 import sys
+import tempfile
 
 import flux
 import flux.cli.submit as base
 import fractale.defaults as defaults
+import fractale.utils as utils
 from compspec.plugin.registry import PluginRegistry
 from fractale.store import FractaleStore
 from fractale.subsystem import get_subsystem_solver
@@ -48,20 +51,41 @@ class SubmitCmd(base.SubmitCmd):
         Check feasibility based on local user subsystems with fractale library.
         """
         jobspec = self.jobspec_create(args)
-        store = FractaleStore(args.config_dir)
+        store = FractaleStore(remote_args.config_dir)
 
-        # TODO Vanessa
-        # I want to make a hardened organization for this.
+        # Detect or discover local cluster resources if no store created
+        if not os.path.exists(store.root):
+            store.detect()
+
+        # This is inefficient, but right now we write the jobspec to file
+        # TODO: expose a means to pass in JobSpec from string or dict (not file)
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".yaml", prefix="jobspec-"
+        ) as temp_file:
+            temp_file_path = temp_file.name
+        utils.write_yaml(jobspec.jobspec, temp_file_path)
+
+        # TODO Vanessa - this is parsing the wrong format. I need to update it.
+        # I want to make a hardened organization for this. Operations across clusters can be in in parallel
         # ----
-        # 1. The user needs to register different clusters. Each needs a remote URI.
+        # 1. Each detected cluster needs a remote URI or credential (e.g., Kubernetes)
+        #   - TODO: we should be able to detect kubernetes cluster as ephemeral
+        #   - TODO: make compspec-kube for this use case.
         # 2. For feasibility, we first check cluster resources for each known cluster
         # 3. We then check subsystem requests that come from requires (e.g. --setattr=requires.software=spack:curl)
-        # 4. Based on the filtered set, we finalize, add the delegation plugin URI, and we are done.
+        # 4. Based on the filtered set:
+        #    - For Flux we finalize, add the delegation plugin URI, and we are done.
+        #    - For Kubernetes, it's easier (an API call) and this should also be done by delegation
         # 5. Fall through case (no remote matches) we submit as usual to local cluster instance
-        # Going for a run - will work on this after.
-        solver = get_subsystem_solver(store.clusters_root, args.solver)
-        is_satisfied = solver.satisfied(args.jobspec)
+        print("FIX THE FORMAT VANESSA YOU GOBLIN")
+        import IPython
 
+        IPython.embed()
+        solver = get_subsystem_solver(store.clusters_root, remote_args.solver)
+        is_satisfied = solver.satisfied(temp_file_path)
+
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
         # If we are satisifed, we can get the result, and then add it to the JobSpec as a delegate dependency. We will
         # That would look like this:
         # args.setattr = [f'delegate.local_uri=${uri}']
@@ -108,6 +132,10 @@ class RemoteSubmitCmd(base.SubmitCmd):
         # Now, we dispatch to the correct handler based on the command.
         if args.command == "submit":
             self.handle_submit(remaining_argv, args)
+        else:
+            print(
+                f"{args.command} is not a recognized Flux command. Try `flux remote submit`"
+            )
 
     def handle_submit(self, argv, remote_args):
         """
