@@ -1,0 +1,21 @@
+[workspace]
+authors = ["vsoch <vsoch@users.noreply.github.com>"]
+channels = ["conda-forge"]
+name = "flux-delegate-py"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+graph-tool = ">=2.98,<3"
+python = ">=3.13.7,<3.14"
+ipython = ">=9.5.0,<10"
+pip = ">=25.2,<26"
+ply = ">=3.11,<4"
+
+[pypi-dependencies]
+fractale = ">=0.0.13, <0.0.14"
+
+[activation]
+scripts = ["set_vars.sh"]
