@@ -11,8 +11,10 @@
 import argparse
 import logging
 import os
+import shutil
 import sys
 import tempfile
+from datetime import datetime
 
 import flux
 import flux.cli.submit as base
@@ -39,8 +41,23 @@ class DetectCmd(base.SubmitCmd):
 
         This doesn't technically need to be based on submit.
         """
+        # If we are exporting, we are going to run detect in a non-existing directory
+        cleanup = False
+        if args.export and not args.config_dir:
+            args.config_dir = tempfile.mkdtemp(prefix="flux-detect-")
+            cleanup = True
         store = FractaleStore(args.config_dir)
         store.detect(force=args.force)
+
+        # Export locally detected subsystems
+        if args.export:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archive_name = f"fractale-export-{timestamp}"
+            shutil.make_archive(archive_name, "zip", args.config_dir)
+
+            # Cleanup if we created a temporary context
+            if cleanup and os.path.exists(args.config_dir):
+                shutil.rmtree(args.config_dir)
 
     def run_parser(self):
         """
@@ -61,6 +78,12 @@ class DetectCmd(base.SubmitCmd):
             help="Given existing metadata, force an update.",
             action="store_true",
             default=False,
+        )
+        parser.add_argument(
+            "--export",
+            default=False,
+            action="store_true",
+            help="Export to local archive for later import.",
         )
 
         # We need to handle this manually since it's off base for argparse

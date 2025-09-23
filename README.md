@@ -53,12 +53,28 @@ I added the local uri as an attribute because it would mean we can direct the in
 For integration with Fractale (and flux) we won't require the user to ask for delegation directly. We will provide a command for a remote submit:
 
 ```bash
-flux remote submit --dry-run --setattr=requires.software=spack:curl curl
+flux remote submit --dry-run -S=requires.software.spack.value=curl curl
+flux remote submit --dry-run --solver graph -S=requires.software.spack.name=curl curl
 
 # Development variant
-python cmd/flux-remote.py submit --dry-run --setattr=requires.software=spack:curl curl
+python cmd/flux-remote.py submit --dry-run -S=requires.software.spack.value=curl curl
+python cmd/flux-remote.py submit --dry-run --solver graph -S=requires.software.spack.name=curl curl
 ```
 
-In the above, the user is asking for a remote submit. This means we are going to receive the request in Flux, compare to local subsystems and clusters defined by the user in their home, and then make a selection of a cluster. The selected cluster will go straight to the JobTap plugin from the `flux remote submit` command without the user needing any subsequent interaction.
-What I want to work on / harden is the organization, structure, and query of the cluster and subsystem metadata. I've been forcing use of a graph but I am not convinced that is the best way.
+In the above, the user is asking for a remote submit. This means we are going to receive the request in Flux, compare to local subsystems and clusters defined by the user in their home, and then make a selection of a cluster. The selected cluster will go straight to the JobTap plugin from the `flux remote submit` command without the user needing any subsequent interaction. To support this process, we have a `flux detect` command that can detect (and generate) local subsystem metadata, and even export it.
+
+```bash
+# Automatic detection of new clusters and subsystems
+python cmd/flux-detect.py
+flux detect
+
+# Force detection of existing
+python cmd/flux-detect.py  --force
+flux detect --force
+
+# Detect and export to archive for import (detects all present)
+python cmd/flux-detect.py  --export
+flux detect --export
+```
+
 See [examples/fractale](examples/fractale) for the full example, and the [cmd](cmd) that is added to Flux as a WIP to orchestrate this.

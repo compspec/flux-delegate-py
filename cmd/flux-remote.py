@@ -63,20 +63,20 @@ class SubmitCmd(base.SubmitCmd):
         if not os.path.exists(store.root):
             sys.exit("No subsystems found.")
 
-        # TODO Vanessa - this is parsing the wrong format. I need to update it.
-        # I want to make a hardened organization for this. Operations across clusters can be in in parallel
-        # ----
         # 1. Each detected cluster needs a remote URI or credential (e.g., Kubernetes)
         #   - TODO: we should be able to detect kubernetes cluster as ephemeral
         #   - TODO: make compspec-kube for this use case.
         # 2. For feasibility, we first check cluster resources for each known cluster
-        # 3. We then check subsystem requests that come from requires (e.g. --setattr=requires.software=spack:curl)
+        # 3. We then check subsystem requests that come from requires (e.g. --setattr=requires.software=spack...)
+        solver = get_subsystem_solver(store.clusters_root, remote_args.solver)
+
+        # 4. This returns batch a match object with count, clusters, etc.
+        match = solver.satisfied(jobspec.jobspec, return_results=True)
+
         # 4. Based on the filtered set:
         #    - For Flux we finalize, add the delegation plugin URI, and we are done.
         #    - For Kubernetes, it's easier (an API call) and this should also be done by delegation
         # 5. Fall through case (no remote matches) we submit as usual to local cluster instance
-        solver = get_subsystem_solver(store.clusters_root, remote_args.solver)
-        is_satisfied = solver.satisfied(jobspec.jobspec)
 
         # If we are satisifed, we can get the result, and then add it to the JobSpec as a delegate dependency. We will
         # That would look like this:
